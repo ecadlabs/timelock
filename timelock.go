@@ -8,6 +8,7 @@ import (
 	"slices"
 	"strconv"
 
+	tz "github.com/ecadlabs/gotez/v2"
 	"golang.org/x/crypto/blake2b"
 )
 
@@ -23,14 +24,14 @@ var (
 )
 
 type VDFTuple struct {
-	LockedValue   *big.Int
-	UnlockedValue *big.Int
-	VDFProof      *big.Int
+	LockedValue   tz.BigUint `json:"locked_value"`
+	UnlockedValue tz.BigUint `json:"unlocked_value"`
+	VDFProof      tz.BigUint `json:"vdf_proof"`
 }
 
 type TimelockProof struct {
-	VDFTuple VDFTuple
-	Nonce    *big.Int
+	VDFTuple VDFTuple   `json:"vdf_tuple"`
+	Nonce    tz.BigUint `json:"nonce"`
 }
 
 func nextPrime(n *big.Int) *big.Int {
@@ -116,17 +117,30 @@ func proveWesolowski(time int, locked, unlocked, mod *big.Int) *big.Int {
 	return pi.Mod(pi, mod)
 }
 
+func mustNewBigUint(x *big.Int) tz.BigUint {
+	out, err := tz.NewBigUint(x)
+	if err != nil {
+		panic(err.Error())
+	}
+	return out
+}
+
+func newBigUintUnsafe(x *big.Int) tz.BigUint {
+	out, _ := tz.NewBigUint(x)
+	return out
+}
+
 func Prove(time int, locked, unlocked, mod *big.Int) *TimelockProof {
 	if mod == nil {
 		mod = rsaModulus
 	}
 	return &TimelockProof{
 		VDFTuple: VDFTuple{
-			LockedValue:   locked,
-			UnlockedValue: unlocked,
-			VDFProof:      proveWesolowski(time, locked, unlocked, mod),
+			LockedValue:   mustNewBigUint(locked),
+			UnlockedValue: mustNewBigUint(unlocked),
+			VDFProof:      newBigUintUnsafe(proveWesolowski(time, locked, unlocked, mod)),
 		},
-		Nonce: big.NewInt(1),
+		Nonce: tz.NewBigUint64(1),
 	}
 }
 
@@ -154,33 +168,35 @@ func PrecomputeTimelock(random io.Reader, time int, mod *big.Int) (*VDFTuple, er
 	if mod == nil {
 		mod = rsaModulus
 	}
-	lockedValue, err := generate(random, mod)
+	locked, err := generate(random, mod)
 	if err != nil {
 		return nil, err
 	}
-	unlockedValue := unlockTimelock(time, lockedValue, mod)
+	unlocked := unlockTimelock(time, locked, mod)
 	return &VDFTuple{
-		LockedValue:   lockedValue,
-		UnlockedValue: unlockedValue,
-		VDFProof:      proveWesolowski(time, lockedValue, unlockedValue, mod),
+		LockedValue:   newBigUintUnsafe(locked),
+		UnlockedValue: newBigUintUnsafe(unlocked),
+		VDFProof:      newBigUintUnsafe(proveWesolowski(time, locked, unlocked, mod)),
 	}, nil
 }
 
 func (vdfTuple *VDFTuple) verifyWesolowski(time int, mod *big.Int) bool {
-	l := hashToPrime(time, vdfTuple.LockedValue, vdfTuple.UnlockedValue, mod)
+	lockedValue := vdfTuple.LockedValue.Int()
+	unlockedValue := vdfTuple.UnlockedValue.Int()
+	l := hashToPrime(time, lockedValue, unlockedValue, mod)
 	r := new(big.Int).Exp(big.NewInt(2), big.NewInt(int64(time)), l)
-	ll := new(big.Int).Exp(vdfTuple.VDFProof, l, mod)
-	rr := new(big.Int).Exp(vdfTuple.LockedValue, r, mod)
+	ll := new(big.Int).Exp(vdfTuple.VDFProof.Int(), l, mod)
+	rr := new(big.Int).Exp(lockedValue, r, mod)
 	unlocked := new(big.Int).Mul(ll, rr)
 	unlocked.Mod(unlocked, mod)
-	return unlocked.Cmp(vdfTuple.UnlockedValue) == 0
+	return unlocked.Cmp(unlockedValue) == 0
 }
 
 func Verify(locked *big.Int, proof *TimelockProof, time int, mod *big.Int) bool {
 	if mod == nil {
 		mod = rsaModulus
 	}
-	randomizedChallenge := new(big.Int).Exp(proof.VDFTuple.LockedValue, proof.Nonce, mod)
+	randomizedChallenge := new(big.Int).Exp(proof.VDFTuple.LockedValue.Int(), proof.Nonce.Int(), mod)
 	return randomizedChallenge.Cmp(locked) == 0 && proof.VDFTuple.verifyWesolowski(time, mod)
 }
 
@@ -193,12 +209,15 @@ func (v *VDFTuple) Proof(random io.Reader, time int, mod *big.Int) (locked *big.
 	if mod == nil {
 		mod = rsaModulus
 	}
-	if v.LockedValue.Cmp(one) < 1 ||
-		v.UnlockedValue.Sign() < 1 ||
-		v.VDFProof.Sign() < 1 ||
-		v.LockedValue.Cmp(mod) > 0 ||
-		v.UnlockedValue.Cmp(mod) > 0 ||
-		v.VDFProof.Cmp(mod) >= 0 {
+	lockedValue := v.LockedValue.Int()
+	unlockedValue := v.UnlockedValue.Int()
+	vdfProof := v.VDFProof.Int()
+	if lockedValue.Cmp(one) < 1 ||
+		unlockedValue.Sign() < 1 ||
+		vdfProof.Sign() < 1 ||
+		lockedValue.Cmp(mod) > 0 ||
+		unlockedValue.Cmp(mod) > 0 ||
+		vdfProof.Cmp(mod) >= 0 {
 		return nil, nil, ErrInvalidArgument
 	}
 	if !v.verifyWesolowski(time, mod) {
@@ -208,10 +227,10 @@ func (v *VDFTuple) Proof(random io.Reader, time int, mod *big.Int) (locked *big.
 	if err != nil {
 		return nil, nil, err
 	}
-	randomizedLockedValue := new(big.Int).Exp(v.LockedValue, nonce, mod)
+	randomizedLockedValue := new(big.Int).Exp(lockedValue, nonce, mod)
 	return randomizedLockedValue, &TimelockProof{
 		VDFTuple: *v,
-		Nonce:    nonce,
+		Nonce:    newBigUintUnsafe(nonce),
 	}, nil
 }
 
@@ -221,7 +240,7 @@ func (p *TimelockProof) SymmetricKey(mod *big.Int) [32]byte {
 	if mod == nil {
 		mod = rsaModulus
 	}
-	updated := new(big.Int).Exp(p.VDFTuple.UnlockedValue, p.Nonce, mod)
+	updated := new(big.Int).Exp(p.VDFTuple.UnlockedValue.Int(), p.Nonce.Int(), mod)
 	h, _ := blake2b.New(32, kdfKey)
 	h.Write([]byte(updated.String()))
 	var out [32]byte

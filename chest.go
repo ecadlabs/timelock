@@ -4,17 +4,18 @@ import (
 	"io"
 	"math/big"
 
+	tz "github.com/ecadlabs/gotez/v2"
 	"golang.org/x/crypto/nacl/secretbox"
 )
 
 type Chest struct {
-	LockedValue *big.Int
-	CipherText  CipherText
+	LockedValue tz.BigUint `json:"locked_value"`
+	CipherText  CipherText `json:"ciphertext"`
 }
 
 type CipherText struct {
-	Payload []byte
-	Nonce   [24]byte
+	Nonce   [24]byte `json:"nonce"`
+	Payload []byte   `tz:"dyn" json:"payload"`
 }
 
 type ChestKey = TimelockProof
@@ -53,7 +54,7 @@ func NewChestAndChestKey(random io.Reader, payload []byte, time int, mod *big.In
 		return nil, nil, err
 	}
 	return &Chest{
-		LockedValue: lockedValue,
+		LockedValue: newBigUintUnsafe(lockedValue),
 		CipherText:  *cipherText,
 	}, proof, nil
 }
@@ -62,14 +63,14 @@ func (chest *Chest) NewKey(time int, mod *big.Int) (key *ChestKey, err error) {
 	if time <= 0 {
 		return nil, ErrInvalidArgument
 	}
-	return UnlockAndProve(time, chest.LockedValue, mod), nil
+	return UnlockAndProve(time, chest.LockedValue.Int(), mod), nil
 }
 
 func (chest *Chest) Open(key *ChestKey, time int, mod *big.Int) ([]byte, bool, error) {
 	if time <= 0 {
 		return nil, false, ErrInvalidArgument
 	}
-	if !Verify(chest.LockedValue, key, time, mod) {
+	if !Verify(chest.LockedValue.Int(), key, time, mod) {
 		return nil, false, nil
 	}
 	symKey := key.SymmetricKey(mod)
