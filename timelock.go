@@ -23,14 +23,14 @@ var (
 	one = big.NewInt(1)
 )
 
-type VDFTuple struct {
+type Timelock struct {
 	LockedValue   tz.BigUint `json:"locked_value"`
 	UnlockedValue tz.BigUint `json:"unlocked_value"`
 	VDFProof      tz.BigUint `json:"vdf_proof"`
 }
 
 type TimelockProof struct {
-	VDFTuple VDFTuple   `json:"vdf_tuple"`
+	VDFTuple Timelock   `json:"vdf_tuple"`
 	Nonce    tz.BigUint `json:"nonce"`
 }
 
@@ -135,7 +135,7 @@ func Prove(time int, locked, unlocked, mod *big.Int) *TimelockProof {
 		mod = rsaModulus
 	}
 	return &TimelockProof{
-		VDFTuple: VDFTuple{
+		VDFTuple: Timelock{
 			LockedValue:   mustNewBigUint(locked),
 			UnlockedValue: mustNewBigUint(unlocked),
 			VDFProof:      newBigUintUnsafe(proveWesolowski(time, locked, unlocked, mod)),
@@ -164,7 +164,7 @@ func UnlockAndProve(time int, locked, mod *big.Int) *TimelockProof {
 	return Prove(time, locked, unlocked, mod)
 }
 
-func PrecomputeTimelock(random io.Reader, time int, mod *big.Int) (*VDFTuple, error) {
+func PrecomputeTimelock(random io.Reader, time int, mod *big.Int) (*Timelock, error) {
 	if mod == nil {
 		mod = rsaModulus
 	}
@@ -173,14 +173,14 @@ func PrecomputeTimelock(random io.Reader, time int, mod *big.Int) (*VDFTuple, er
 		return nil, err
 	}
 	unlocked := unlockTimelock(time, locked, mod)
-	return &VDFTuple{
+	return &Timelock{
 		LockedValue:   newBigUintUnsafe(locked),
 		UnlockedValue: newBigUintUnsafe(unlocked),
 		VDFProof:      newBigUintUnsafe(proveWesolowski(time, locked, unlocked, mod)),
 	}, nil
 }
 
-func (vdfTuple *VDFTuple) verifyWesolowski(time int, mod *big.Int) bool {
+func (vdfTuple *Timelock) verifyWesolowski(time int, mod *big.Int) bool {
 	lockedValue := vdfTuple.LockedValue.Int()
 	unlockedValue := vdfTuple.UnlockedValue.Int()
 	l := hashToPrime(time, lockedValue, unlockedValue, mod)
@@ -205,7 +205,7 @@ var (
 	ErrVerification    = errors.New("timelock tuple verification failed")
 )
 
-func (v *VDFTuple) Proof(random io.Reader, time int, mod *big.Int) (locked *big.Int, proof *TimelockProof, err error) {
+func (v *Timelock) NewProof(random io.Reader, time int, mod *big.Int) (locked *big.Int, proof *TimelockProof, err error) {
 	if mod == nil {
 		mod = rsaModulus
 	}

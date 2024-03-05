@@ -118,12 +118,12 @@ func TestVec(t *testing.T) {
 		lockedValue, _ := tz.ParseBigUint(v.lockedValue, 10)
 		unlockedValue, _ := tz.ParseBigUint(v.unlockedValue, 10)
 		vdfProof, _ := tz.ParseBigUint(v.vdfProof, 10)
-		tuple := VDFTuple{
+		tuple := Timelock{
 			LockedValue:   lockedValue,
 			UnlockedValue: unlockedValue,
 			VDFProof:      vdfProof,
 		}
-		locked, proof, err := tuple.Proof(rand.Reader, v.time, nil)
+		locked, proof, err := tuple.NewProof(rand.Reader, v.time, nil)
 		require.NoError(t, err)
 		assert.True(t, Verify(locked, proof, v.time, nil))
 
@@ -149,7 +149,7 @@ func TestLowLevel(t *testing.T) {
 	timelockPrecomputedTuple, err := PrecomputeTimelock(rand.Reader, time, nil)
 	require.NoError(t, err)
 
-	locked, proof, err := timelockPrecomputedTuple.Proof(rand.Reader, time, nil)
+	locked, proof, err := timelockPrecomputedTuple.NewProof(rand.Reader, time, nil)
 	require.NoError(t, err)
 	require.True(t, Verify(locked, proof, time, nil))
 
@@ -172,7 +172,7 @@ func TestLowLevel(t *testing.T) {
 func TestChest(t *testing.T) {
 	time := 10_000
 	payload := []byte("zrethgfdsq")
-	chest, chestKey1, err := NewChestAndChestKey(rand.Reader, payload, time, nil)
+	chest, chestKey1, err := NewChest(rand.Reader, payload, time, nil)
 	require.NoError(t, err)
 	chestKey2, err := chest.NewKey(time, nil)
 	require.NoError(t, err)

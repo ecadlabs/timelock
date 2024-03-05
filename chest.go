@@ -36,7 +36,7 @@ func Decrypt(key *[32]byte, c *CipherText) ([]byte, bool) {
 	return secretbox.Open(nil, c.Payload, &c.Nonce, key)
 }
 
-func NewChestAndChestKey(random io.Reader, payload []byte, time int, mod *big.Int) (chest *Chest, key *ChestKey, err error) {
+func NewChest(random io.Reader, payload []byte, time int, mod *big.Int) (chest *Chest, key *ChestKey, err error) {
 	if time <= 0 {
 		return nil, nil, ErrInvalidArgument
 	}
@@ -44,7 +44,14 @@ func NewChestAndChestKey(random io.Reader, payload []byte, time int, mod *big.In
 	if err != nil {
 		return nil, nil, err
 	}
-	lockedValue, proof, err := vdfTuple.Proof(random, time, mod)
+	return NewChestFromTimelock(random, payload, time, vdfTuple, mod)
+}
+
+func NewChestFromTimelock(random io.Reader, payload []byte, time int, timelock *Timelock, mod *big.Int) (chest *Chest, key *ChestKey, err error) {
+	if time <= 0 {
+		return nil, nil, ErrInvalidArgument
+	}
+	lockedValue, proof, err := timelock.NewProof(random, time, mod)
 	if err != nil {
 		return nil, nil, err
 	}
