@@ -3,7 +3,9 @@
 package timelock
 
 import (
+	"bytes"
 	"crypto/rand"
+	"fmt"
 	"testing"
 
 	tz "github.com/ecadlabs/gotez/v2"
@@ -189,4 +191,42 @@ func TestChest(t *testing.T) {
 
 	assert.Equal(t, payload, op1)
 	assert.Equal(t, op1, op2)
+}
+
+func ExampleNewChest() {
+	time := 10_000
+	payload := []byte("message")
+	chest, key, err := NewChest(rand.Reader, payload, time, nil)
+	fmt.Println(err)
+
+	var chestBytes, keyBytes bytes.Buffer
+	err = encoding.Encode(&chestBytes, chest)
+	fmt.Println(err)
+	err = encoding.Encode(&keyBytes, key)
+	fmt.Println(err)
+	// Output:
+	// <nil>
+	// <nil>
+	// <nil>
+}
+
+func ExampleNewChestFromTimelock() {
+	time := 10_000
+	precomputed, err := PrecomputeTimelock(rand.Reader, time, nil) // can be cached
+	fmt.Println(err)
+
+	payload := []byte("message")
+	chest, key, err := NewChestFromTimelock(rand.Reader, payload, time, precomputed, nil)
+	fmt.Println(err)
+
+	var chestBytes, keyBytes bytes.Buffer
+	err = encoding.Encode(&chestBytes, chest)
+	fmt.Println(err)
+	err = encoding.Encode(&keyBytes, key)
+	fmt.Println(err)
+	// Output:
+	// <nil>
+	// <nil>
+	// <nil>
+	// <nil>
 }
